@@ -369,17 +369,17 @@
     return '<div style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;background:#f2f2f7;display:flex;align-items:center;justify-content:center;font-size:' + Math.round(size * 0.4) + 'px;color:#6e6e73;font-weight:600;flex-shrink:0">' + escapeHtml(fb) + "</div>";
   }
   function renderHeader(title, subtitle, showBack, backCall, rightHtml) {
+    var closeBtn = '<div class="hj-icon-btn" onclick="window.__henji.closeApp()" title="关闭">' + ICONS.close + "</div>";
     return '<div class="hj-header">' +
       '<div class="hj-header-left">' + (showBack ? '<div class="hj-icon-btn" onclick="' + backCall + '">' + ICONS.back + "</div>" : "") + "</div>" +
       '<div class="hj-header-title-wrap"><div class="hj-header-title">' + escapeHtml(title) + "</div>" + (subtitle ? '<div class="hj-header-subtitle">' + escapeHtml(subtitle) + "</div>" : "") + "</div>" +
-      '<div class="hj-header-right">' + (rightHtml || "") + "</div>" +
+      '<div class="hj-header-right">' + (rightHtml || "") + closeBtn + "</div>" +
       "</div>";
   }
 
   /* ─── 视图：角色列表 ─── */
   function renderCharList() {
-    var rightBtn = '<div class="hj-icon-btn" onclick="window.__henji.closeApp()">' + ICONS.close + "</div>";
-    var header = renderHeader("痕迹", "", false, "", rightBtn);
+    var header = renderHeader("痕迹", "", false, "", "");
     var body;
     if (!state.characters.length) {
       body = '<div class="hj-empty">' + ICONS.user + "<p>暂无角色</p></div>";
@@ -804,8 +804,8 @@
       "." + ROOT_CLASS + " *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}",
       "." + ROOT_CLASS + "{display:flex;flex-direction:column;height:100%;background:#ffffff;color:#1c1c1e;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}",
       "." + ROOT_CLASS + " .hj-header{display:flex;align-items:center;padding:10px 12px;padding-top:calc(10px + var(--safe-top,0px));border-bottom:1px solid #ececee;position:sticky;top:0;z-index:100;min-height:52px;flex-shrink:0;background:#ffffff}",
-      "." + ROOT_CLASS + " .hj-header-left,." + ROOT_CLASS + " .hj-header-right{width:40px;display:flex;align-items:center;flex-shrink:0}",
-      "." + ROOT_CLASS + " .hj-header-right{justify-content:flex-end}",
+      "." + ROOT_CLASS + " .hj-header-left{width:40px;display:flex;align-items:center;flex-shrink:0}",
+      "." + ROOT_CLASS + " .hj-header-right{min-width:40px;display:flex;align-items:center;flex-shrink:0;gap:2px;justify-content:flex-end}",
       "." + ROOT_CLASS + " .hj-header-title-wrap{flex:1;text-align:center;overflow:hidden}",
       "." + ROOT_CLASS + " .hj-header-title{font-size:18px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
       "." + ROOT_CLASS + " .hj-header-subtitle{font-size:11px;letter-spacing:.08em;color:#9a9a9e;font-style:italic;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
