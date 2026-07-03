@@ -54,6 +54,7 @@
     selectedSliceIds: [],
     userPresentDraft: true,
     actionMode: false,
+    pendingMessages: [],
     modalOpen: null,
     timelineBusy: false,
     entryBusy: false,
@@ -601,9 +602,20 @@
     if (!session.messages.length && !state.parallelBusy) msgsHtml = '<div class="hj-empty"><p>还没有对话，点击下方"推进对话"开始</p></div>';
 
     var footer = '<div class="hj-chat-footer">';
+    if (state.pendingMessages.length) {
+      footer += '<div class="hj-pending-list">';
+      for (var pi = 0; pi < state.pendingMessages.length; pi++) {
+        var pm = state.pendingMessages[pi];
+        footer += '<div class="hj-pending-item' + (pm.type === "action" ? " action" : "") + '">' +
+          '<span>' + (pm.type === "action" ? "旁白 · " : "") + escapeHtml(pm.text) + "</span>" +
+          '<span class="hj-pending-remove" onclick="window.__henji.removePendingMessage(' + pi + ')">' + ICONS.close + "</span>" +
+          "</div>";
+      }
+      footer += "</div>";
+    }
     footer += '<div class="hj-chat-input-row">' +
       '<div class="hj-chat-toggle' + (state.actionMode ? " active" : "") + '" onclick="window.__henji.toggleActionMode()" title="旁白/动作">' + ICONS.edit + "</div>" +
-      '<input class="hj-chat-input" id="hj-chat-input" placeholder="' + (state.actionMode ? "描述一个动作或旁白…" : (session.userPresent ? "输入消息…" : "以旁观视角插入一个场景变化…")) + '" onkeydown="if(event.key===\'Enter\') window.__henji.sendParallelMessage()" />' +
+      '<input class="hj-chat-input" id="hj-chat-input" placeholder="' + (state.actionMode ? "描述一个动作或旁白，回车暂存…" : (session.userPresent ? "输入消息，回车暂存…" : "以旁观视角插入场景变化，回车暂存…")) + '" onkeydown="if(event.key===\'Enter\') window.__henji.stagePendingMessage()" />' +
       '<div class="hj-chat-send-btn" onclick="window.__henji.sendParallelMessage()">' + ICONS.send + "</div>" +
       "</div>";
     footer += '<button class="hj-btn hj-btn-outline hj-advance-btn" style="width:100%" ' + (state.parallelBusy ? "disabled" : "") + ' onclick="window.__henji.advanceParallel()">' + ICONS.fastForward + "<span>推进对话</span></button>";
@@ -791,10 +803,12 @@
     saveParallelIndex(state.parallelIndex);
     saveParallelSession(session);
     state.selectedSliceIds = [];
+    state.pendingMessages = [];
     goTo("parallelChat", { currentSessionId: session.id });
     advanceParallel();
   }
   function openParallelSession(id) {
+    state.pendingMessages = [];
     if (state.parallelSessions[id]) { goTo("parallelChat", { currentSessionId: id }); return; }
     loadParallelSession(id).then(function(s) {
       if (s) goTo("parallelChat", { currentSessionId: id });
@@ -826,15 +840,38 @@
     toast(session.userPresent ? "你现在在场了" : "你现在旁观，角色无法感知到你");
     renderApp();
   }
-  function sendParallelMessage() {
-    var session = state.parallelSessions[state.currentSessionId];
+  function stagePendingMessage() {
     var input = document.getElementById("hj-chat-input");
-    if (!session || !input) return;
+    if (!input) return;
     var text = input.value.trim();
     if (!text) return;
-    session.messages.push({ id: generateId(), speaker: "user", type: state.actionMode ? "action" : "text", text: text, ts: Date.now(), presentWhenSent: session.userPresent });
+    state.pendingMessages.push({ type: state.actionMode ? "action" : "text", text: text });
     input.value = "";
     state.actionMode = false;
+    renderApp();
+    setTimeout(function() { var el = document.getElementById("hj-chat-input"); if (el) el.focus(); }, 30);
+  }
+  function removePendingMessage(idx) {
+    state.pendingMessages.splice(idx, 1);
+    renderApp();
+  }
+  function sendParallelMessage() {
+    var session = state.parallelSessions[state.currentSessionId];
+    if (!session) return;
+    var input = document.getElementById("hj-chat-input");
+    var text = input ? input.value.trim() : "";
+    if (text) {
+      state.pendingMessages.push({ type: state.actionMode ? "action" : "text", text: text });
+      input.value = "";
+      state.actionMode = false;
+    }
+    if (!state.pendingMessages.length) return;
+    var now = Date.now();
+    for (var i = 0; i < state.pendingMessages.length; i++) {
+      var p = state.pendingMessages[i];
+      session.messages.push({ id: generateId(), speaker: "user", type: p.type, text: p.text, ts: now + i, presentWhenSent: session.userPresent });
+    }
+    state.pendingMessages = [];
     session.updatedAt = Date.now();
     saveParallelSession(session);
     updateParallelIndexPreview(session);
@@ -973,6 +1010,12 @@
       "." + ROOT_CLASS + " .hj-msg-action{text-align:center;font-size:12.5px;font-style:italic;color:#9a9a9e;margin:14px 30px}",
       "." + ROOT_CLASS + " .hj-chat-typing{display:flex;align-items:center;gap:8px;padding:6px 4px;color:#9a9a9e;font-size:12px}",
       "." + ROOT_CLASS + " .hj-chat-footer{border-top:1px solid #ececee;padding:10px 14px;padding-bottom:calc(10px + var(--safe-bottom,0px));display:flex;flex-direction:column;gap:8px;background:#ffffff}",
+      "." + ROOT_CLASS + " .hj-pending-list{display:flex;flex-direction:column;gap:6px;margin-bottom:8px;max-height:120px;overflow-y:auto}",
+      "." + ROOT_CLASS + " .hj-pending-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 10px;border-radius:10px;background:#f2f2f7;font-size:12.5px;color:#1c1c1e}",
+      "." + ROOT_CLASS + " .hj-pending-item.action{font-style:italic;color:#6e6e73}",
+      "." + ROOT_CLASS + " .hj-pending-item span:first-child{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+      "." + ROOT_CLASS + " .hj-pending-remove{display:flex;align-items:center;justify-content:center;color:#9a9a9e;cursor:pointer;flex-shrink:0}",
+      "." + ROOT_CLASS + " .hj-pending-remove svg{width:14px;height:14px}",
       "." + ROOT_CLASS + " .hj-chat-input-row{display:flex;align-items:center;gap:8px}",
       "." + ROOT_CLASS + " .hj-chat-toggle{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#6e6e73;flex-shrink:0;cursor:pointer}",
       "." + ROOT_CLASS + " .hj-chat-toggle.active{background:#1c1c1e;color:#ffffff}",
@@ -1010,6 +1053,8 @@
       deleteParallelSession: deleteParallelSession,
       toggleActionMode: toggleActionMode,
       toggleSessionPresence: toggleSessionPresence,
+      stagePendingMessage: stagePendingMessage,
+      removePendingMessage: removePendingMessage,
       sendParallelMessage: sendParallelMessage,
       advanceParallel: advanceParallel
     };
