@@ -53,7 +53,9 @@
     userPresentDraft: true,
     actionMode: false,
     modalOpen: null,
-    isBusy: false
+    timelineBusy: false,
+    entryBusy: false,
+    parallelBusy: false
   };
 
   /* ─── 工具函数 ─── */
@@ -419,10 +421,10 @@
 
     body += '<div class="hj-actions-row">';
     if (!entries.length) {
-      body += '<button class="hj-btn hj-btn-primary" style="flex:1" ' + (state.isBusy ? "disabled" : "") + ' onclick="window.__henji.generateInitialTimeline()">' + ICONS.sparkle + "<span>生成时间线</span></button>";
+      body += '<button class="hj-btn hj-btn-primary" style="flex:1" ' + (state.timelineBusy ? "disabled" : "") + ' onclick="window.__henji.generateInitialTimeline()">' + ICONS.sparkle + "<span>生成时间线</span></button>";
     } else {
-      body += '<button class="hj-btn hj-btn-outline" style="flex:1" ' + (state.isBusy ? "disabled" : "") + ' onclick="window.__henji.generateInitialTimeline()">' + ICONS.refresh + "<span>重新生成</span></button>";
-      body += '<button class="hj-btn hj-btn-outline" style="flex:1" ' + (state.isBusy ? "disabled" : "") + ' onclick="window.__henji.generateMeetTimeline()">' + ICONS.sparkle + "<span>相遇后的记忆</span></button>";
+      body += '<button class="hj-btn hj-btn-outline" style="flex:1" ' + (state.timelineBusy ? "disabled" : "") + ' onclick="window.__henji.generateInitialTimeline()">' + ICONS.refresh + "<span>重新生成</span></button>";
+      body += '<button class="hj-btn hj-btn-outline" style="flex:1" ' + (state.timelineBusy ? "disabled" : "") + ' onclick="window.__henji.generateMeetTimeline()">' + ICONS.sparkle + "<span>相遇后的记忆</span></button>";
     }
     body += "</div>";
 
@@ -483,7 +485,7 @@
     var colors = getEmotionColor(entry.emotionTag);
     var body;
     if (!entry.content) {
-      if (state.isBusy) {
+      if (state.entryBusy) {
         body = '<div class="hj-loading-inline"><div class="hj-spinner"></div><p>正在生成这段记忆…</p></div>';
       } else {
         body = '<div class="hj-empty"><p>这段记忆还没有展开</p><button class="hj-btn hj-btn-primary" onclick="window.__henji.generateEntryContent(\'' + entry.id + '\')">生成正文</button></div>';
@@ -554,7 +556,7 @@
       '<div class="hj-segmented-btn' + (state.userPresentDraft ? " active" : "") + '" onclick="window.__henji.setUserPresentDraft(true)">在场</div>' +
       '<div class="hj-segmented-btn' + (!state.userPresentDraft ? " active" : "") + '" onclick="window.__henji.setUserPresentDraft(false)">不在场</div>' +
       "</div>";
-    var canCreate = state.selectedSliceIds.length >= 2 && state.selectedSliceIds.length <= 3 && !state.isBusy;
+    var canCreate = state.selectedSliceIds.length >= 2 && state.selectedSliceIds.length <= 3;
     body += '<div style="padding:24px 20px"><button class="hj-btn hj-btn-primary" style="width:100%" ' + (canCreate ? "" : "disabled") + ' onclick="window.__henji.createParallelSession()">创建平行时空（' + state.selectedSliceIds.length + "/3）</button></div>";
     return header + '<div class="hj-content">' + body + "</div>";
   }
@@ -568,8 +570,8 @@
 
     var msgsHtml = "";
     for (var i = 0; i < session.messages.length; i++) msgsHtml += renderChatMessage(session, session.messages[i]);
-    if (state.isBusy) msgsHtml += '<div class="hj-chat-typing"><div class="hj-spinner-sm"></div><span>' + escapeHtml(session.characterName) + "正在回应…</span></div>";
-    if (!session.messages.length && !state.isBusy) msgsHtml = '<div class="hj-empty"><p>还没有对话，点击下方"推进对话"开始</p></div>';
+    if (state.parallelBusy) msgsHtml += '<div class="hj-chat-typing"><div class="hj-spinner-sm"></div><span>' + escapeHtml(session.characterName) + "正在回应…</span></div>";
+    if (!session.messages.length && !state.parallelBusy) msgsHtml = '<div class="hj-empty"><p>还没有对话，点击下方"推进对话"开始</p></div>';
 
     var footer = '<div class="hj-chat-footer">';
     if (session.userPresent) {
@@ -579,7 +581,7 @@
         '<div class="hj-chat-send-btn" onclick="window.__henji.sendParallelMessage()">' + ICONS.send + "</div>" +
         "</div>";
     }
-    footer += '<button class="hj-btn hj-btn-outline hj-advance-btn" style="width:100%" ' + (state.isBusy ? "disabled" : "") + ' onclick="window.__henji.advanceParallel()">' + ICONS.fastForward + "<span>推进对话</span></button>";
+    footer += '<button class="hj-btn hj-btn-outline hj-advance-btn" style="width:100%" ' + (state.parallelBusy ? "disabled" : "") + ' onclick="window.__henji.advanceParallel()">' + ICONS.fastForward + "<span>推进对话</span></button>";
     footer += "</div>";
 
     return header + '<div class="hj-content hj-chat-scroll" id="hj-chat-scroll">' + msgsHtml + "</div>" + footer;
@@ -627,12 +629,12 @@
   }
   function generateInitialTimeline() {
     var char = getCharById(state.currentCharId);
-    if (!char || state.isBusy) return;
-    state.isBusy = true; renderApp();
+    if (!char || state.timelineBusy) return;
+    state.timelineBusy = true; renderApp();
     buildTimelinePrompt(char).then(function(messages) { return aiChat(messages, 0.9); }).then(function(raw) {
       var data = parseJsonLoose(raw);
       var events = data && data.events;
-      state.isBusy = false;
+      state.timelineBusy = false;
       if (!events || !events.length) { toast("生成失败，请重试"); renderApp(); return; }
       var entries = [];
       for (var i = 0; i < events.length; i++) {
@@ -647,18 +649,18 @@
       saveTimeline(char.id, tl);
       toast("时间线已生成");
       renderApp();
-    }).catch(function(e) { state.isBusy = false; toast("生成失败：" + (e && e.message ? e.message : "未知错误")); renderApp(); });
+    }).catch(function(e) { state.timelineBusy = false; toast("生成失败：" + (e && e.message ? e.message : "未知错误")); renderApp(); });
   }
   function generateMeetTimeline() {
     var char = getCharById(state.currentCharId);
-    if (!char || state.isBusy) return;
-    state.isBusy = true; renderApp();
+    if (!char || state.timelineBusy) return;
+    state.timelineBusy = true; renderApp();
     loadSharedMemory(char).then(function(shared) {
-      if (!shared.core && !shared.recent) { state.isBusy = false; toast("暂无与该角色的相处记录"); renderApp(); return null; }
+      if (!shared.core && !shared.recent) { state.timelineBusy = false; toast("暂无与该角色的相处记录"); renderApp(); return null; }
       return buildMeetPrompt(char, shared).then(function(messages) { return aiChat(messages, 0.9); }).then(function(raw) {
         var data = parseJsonLoose(raw);
         var events = data && data.events;
-        state.isBusy = false;
+        state.timelineBusy = false;
         if (!events || !events.length) { toast("生成失败，请重试"); renderApp(); return; }
         var tl = state.timelines[char.id] || { entries: [] };
         var baseOrder = (tl.entries || []).reduce(function(m, en) { return Math.max(m, en.order || 0); }, -1) + 1;
@@ -673,7 +675,7 @@
         toast("相遇后的记忆已生成");
         renderApp();
       });
-    }).catch(function(e) { state.isBusy = false; toast("生成失败：" + (e && e.message ? e.message : "未知错误")); renderApp(); });
+    }).catch(function(e) { state.timelineBusy = false; toast("生成失败：" + (e && e.message ? e.message : "未知错误")); renderApp(); });
   }
   function openEntry(id) {
     goTo("detail", { currentEntryId: id });
@@ -683,17 +685,17 @@
   function generateEntryContent(id) {
     var char = getCharById(state.currentCharId);
     var entry = char ? findEntry(char.id, id) : null;
-    if (!char || !entry || state.isBusy) return;
-    state.isBusy = true; renderApp();
+    if (!char || !entry || state.entryBusy) return;
+    state.entryBusy = true; renderApp();
     var context = buildNeighborContext(char.id, id);
     buildArticlePrompt(char, entry, context).then(function(messages) { return aiChat(messages, 1.0); }).then(function(raw) {
       var text = (raw || "").trim().replace(/^```[a-z]*\n?/i, "").replace(/```$/, "");
       entry.content = text || "（生成失败，请重试）";
       entry.contentGeneratedAt = Date.now();
       saveTimeline(char.id, state.timelines[char.id]);
-      state.isBusy = false;
+      state.entryBusy = false;
       renderApp();
-    }).catch(function(e) { state.isBusy = false; toast("生成失败：" + (e && e.message ? e.message : "未知错误")); renderApp(); });
+    }).catch(function(e) { state.entryBusy = false; toast("生成失败：" + (e && e.message ? e.message : "未知错误")); renderApp(); });
   }
   function openParallelList() {
     if (state.parallelIndex && state.parallelIndex.length !== undefined) { goTo("parallelList"); return; }
@@ -716,7 +718,7 @@
   function setUserPresentDraft(v) { state.userPresentDraft = !!v; renderApp(); }
   function createParallelSession() {
     var char = getCharById(state.currentCharId);
-    if (!char || state.selectedSliceIds.length < 2 || state.isBusy) return;
+    if (!char || state.selectedSliceIds.length < 2) return;
     var slices = [];
     for (var i = 0; i < state.selectedSliceIds.length; i++) {
       var e = findEntry(char.id, state.selectedSliceIds[i]);
@@ -775,15 +777,15 @@
   }
   function advanceParallel() {
     var session = state.parallelSessions[state.currentSessionId];
-    if (!session || state.isBusy) return;
-    state.isBusy = true; renderApp();
+    if (!session || state.parallelBusy) return;
+    state.parallelBusy = true; renderApp();
     var usr = buildAdvanceUserMessage(session);
     buildParallelSystemPrompt(session).then(function(sys) {
       return aiChat([{ role: "system", content: sys }, { role: "user", content: usr }], 1.0);
     }).then(function(raw) {
       var data = parseJsonLoose(raw);
       var turns = data && data.turns;
-      state.isBusy = false;
+      state.parallelBusy = false;
       if (!turns || !turns.length) { toast("生成失败，请重试"); renderApp(); return; }
       for (var i = 0; i < turns.length; i++) {
         var t = turns[i];
@@ -795,7 +797,7 @@
       saveParallelSession(session);
       updateParallelIndexPreview(session);
       renderApp();
-    }).catch(function(e) { state.isBusy = false; toast("生成失败：" + (e && e.message ? e.message : "未知错误")); renderApp(); });
+    }).catch(function(e) { state.parallelBusy = false; toast("生成失败：" + (e && e.message ? e.message : "未知错误")); renderApp(); });
   }
 
   /* ─── 样式 ─── */
