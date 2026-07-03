@@ -424,7 +424,7 @@
     if (!entries.length) {
       body += '<button class="hj-btn hj-btn-primary" style="flex:1" ' + (state.timelineBusy ? "disabled" : "") + ' onclick="window.__henji.generateInitialTimeline()">' + ICONS.sparkle + "<span>生成时间线</span></button>";
     } else {
-      body += '<button class="hj-btn hj-btn-outline" style="flex:1" ' + (state.timelineBusy ? "disabled" : "") + ' onclick="window.__henji.generateInitialTimeline()">' + ICONS.refresh + "<span>重新生成</span></button>";
+      body += '<button class="hj-btn hj-btn-outline" style="flex:1" ' + (state.timelineBusy ? "disabled" : "") + ' onclick="window.__henji.confirmRegenerateTimeline()">' + ICONS.refresh + "<span>重新生成</span></button>";
       body += '<button class="hj-btn hj-btn-outline" style="flex:1" ' + (state.timelineBusy ? "disabled" : "") + ' onclick="window.__henji.generateMeetTimeline()">' + ICONS.sparkle + "<span>相遇后的记忆</span></button>";
     }
     body += "</div>";
@@ -627,6 +627,18 @@
     saveTimeline(char.id, tl);
     state.modalOpen = null;
     renderApp();
+  }
+  function confirmRegenerateTimeline() {
+    var char = getCharById(state.currentCharId);
+    if (!char) return;
+    var tl = state.timelines[char.id];
+    var hasGeneratedContent = !!(tl && tl.entries && tl.entries.some(function(e) { return e.source === "auto" && e.content; }));
+    if (!hasGeneratedContent) { generateInitialTimeline(); return; }
+    if (state.roche && state.roche.ui && state.roche.ui.confirm) {
+      state.roche.ui.confirm({ title: "重新生成时间线", message: "这会替换掉现在的时间线节点，其中已经写好正文的记忆卡片也会一并丢失，确定要重新生成吗？" }).then(function(ok) { if (ok) generateInitialTimeline(); }).catch(function() {});
+    } else {
+      generateInitialTimeline();
+    }
   }
   function generateInitialTimeline() {
     var char = getCharById(state.currentCharId);
@@ -924,6 +936,7 @@
       closeModal: closeModal,
       submitAddMemory: submitAddMemory,
       generateInitialTimeline: generateInitialTimeline,
+      confirmRegenerateTimeline: confirmRegenerateTimeline,
       generateMeetTimeline: generateMeetTimeline,
       openEntry: openEntry,
       generateEntryContent: generateEntryContent,
