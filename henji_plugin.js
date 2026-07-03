@@ -639,14 +639,13 @@
     var audioHtml = msg.audioUrl ? ('<audio class="hj-msg-audio" controls preload="none" src="' + escapeHtml(msg.audioUrl) + '"></audio>') : "";
     var awayTag = (isUser && msg.presentWhenSent === false) ? '<span class="hj-msg-away-tag">旁观时插入</span>' : "";
     return '<div class="hj-msg-row' + (isUser ? " me" : "") + '">' +
-      (!isUser ? '<div class="hj-msg-avatar">' + avatarHtml(avatarUrl, name, 34) + "</div>" : "") +
+      '<div class="hj-msg-avatar">' + avatarHtml(avatarUrl, name, 34) + "</div>" +
       '<div class="hj-msg-col">' +
       (!isUser ? '<div class="hj-msg-name">' + escapeHtml(name) + "</div>" : "") +
       '<div class="hj-msg-bubble' + (isUser ? " me" : "") + '">' + escapeHtml(displayText) + "</div>" +
       audioHtml +
       '<div class="hj-msg-time">' + formatTime(msg.ts) + awayTag + "</div>" +
       "</div>" +
-      (isUser ? '<div class="hj-msg-avatar">' + avatarHtml(avatarUrl, name, 34) + "</div>" : "") +
       "</div>";
   }
 
