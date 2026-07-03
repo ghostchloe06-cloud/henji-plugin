@@ -55,6 +55,8 @@
     userPresentDraft: true,
     actionMode: false,
     pendingMessages: [],
+    sessionCreating: false,
+    addParticipantSelectedId: null,
     modalOpen: null,
     timelineBusy: false,
     entryBusy: false,
@@ -220,6 +222,38 @@
     }).catch(function() {});
     return Promise.all([p1, p2]).then(function() { return { core: core, recent: recent }; });
   }
+  var NOW_SLICE_ID = "__now__";
+  function getHistoricalCandidates(charId) {
+    var tl = state.timelines[charId] || { entries: [] };
+    return (tl.entries || []).filter(function(e) { return !!e.content; }).sort(function(a, b) { return (a.order || 0) - (b.order || 0); });
+  }
+  function getNowCandidate(char) {
+    var displayName = char.name || char.handle || "TA";
+    return { id: NOW_SLICE_ID, ageLabel: "现在", title: "现在的" + displayName + "（保留完整记忆）" };
+  }
+  function buildSelectedSlices(char, ids, startIndex) {
+    startIndex = startIndex || 0;
+    var displayName = char.name || char.handle || "TA";
+    var promises = [];
+    var _loop = function(id, idx) {
+      if (id === NOW_SLICE_ID) {
+        promises.push(loadSharedMemory(char).then(function(shared) {
+          var hasMemory = !!(shared.core || shared.recent);
+          var content = hasMemory
+            ? ("这是" + displayName + "现在、也就是当下这一刻的状态，TA拥有和用户之间发生过的全部记忆。" +
+               (shared.core ? "\n关系摘要：" + shared.core : "") +
+               (shared.recent ? "\n最近的相处片段：" + shared.recent : ""))
+            : ("这是" + displayName + "现在、当下这一刻的状态，目前与用户尚无特别的相处记忆。");
+          return { entryId: NOW_SLICE_ID, speakerId: "self_" + (startIndex + idx + 1), ageLabel: "现在", title: "现在的" + displayName, keywords: [], content: content };
+        }));
+      } else {
+        var e = findEntry(char.id, id);
+        promises.push(Promise.resolve(e ? { entryId: e.id, speakerId: "self_" + (startIndex + idx + 1), ageLabel: e.ageLabel, title: e.title, keywords: e.keywords || [], content: e.content || "" } : null));
+      }
+    };
+    for (var i = 0; i < ids.length; i++) _loop(ids[i], i);
+    return Promise.all(promises).then(function(slices) { return slices.filter(Boolean); });
+  }
   function updateParallelIndexPreview(session) {
     for (var i = 0; i < state.parallelIndex.length; i++) {
       if (state.parallelIndex[i].id === session.id) { state.parallelIndex[i].updatedAt = session.updatedAt; break; }
@@ -379,6 +413,7 @@
     else if (state.view === "parallelChat") html += renderParallelChat();
     else html += renderCharList();
     if (state.modalOpen === "addMemory") html += renderAddMemoryModal();
+    else if (state.modalOpen === "addParticipant") html += renderAddParticipantModal();
     html += "</div>";
     state.containerEl.innerHTML = html;
     afterRender();
@@ -495,6 +530,38 @@
       '<button class="hj-btn hj-btn-primary" style="flex:1" onclick="window.__henji.submitAddMemory()">添加</button>' +
       "</div></div></div>";
   }
+  function renderAddParticipantModal() {
+    var session = state.parallelSessions[state.currentSessionId];
+    if (!session) return "";
+    var char = getCharById(session.characterId);
+    var usedIds = session.slices.map(function(s) { return s.entryId; });
+    var candidates = [];
+    if (char && usedIds.indexOf(NOW_SLICE_ID) === -1) candidates.push(getNowCandidate(char));
+    if (char) candidates = candidates.concat(getHistoricalCandidates(char.id).filter(function(e) { return usedIds.indexOf(e.id) === -1; }));
+    var body;
+    if (!candidates.length) {
+      body = '<div class="hj-empty" style="padding:30px 10px"><p>没有更多可添加的身份了</p></div>';
+    } else {
+      body = '<div class="hj-select-list" style="padding:0;max-height:340px;overflow-y:auto">';
+      for (var i = 0; i < candidates.length; i++) {
+        var c = candidates[i];
+        var selected = state.addParticipantSelectedId === c.id;
+        body += '<div class="hj-select-card' + (selected ? " selected" : "") + '" onclick="window.__henji.setAddParticipantSelection(\'' + c.id + '\')">' +
+          '<div class="hj-select-check">' + (selected ? ICONS.check : "") + "</div>" +
+          '<div class="hj-select-info"><div class="hj-select-age">' + escapeHtml(c.ageLabel || "") + '</div><div class="hj-select-title">' + escapeHtml(c.title || "") + "</div></div>" +
+          "</div>";
+      }
+      body += "</div>";
+    }
+    return '<div class="hj-modal-overlay" onclick="if(event.target===this) window.__henji.closeModal()">' +
+      '<div class="hj-modal-card">' +
+      '<div class="hj-modal-title">添加一个身份加入对话</div>' +
+      body +
+      '<div class="hj-modal-actions" style="margin-top:16px">' +
+      '<button class="hj-btn hj-btn-outline" style="flex:1" onclick="window.__henji.closeModal()">取消</button>' +
+      '<button class="hj-btn hj-btn-primary" style="flex:1" ' + (state.addParticipantSelectedId ? "" : "disabled") + ' onclick="window.__henji.confirmAddParticipant()">加入</button>' +
+      "</div></div></div>";
+  }
 
   /* ─── 视图：记忆详情 ─── */
   function renderDetail() {
@@ -558,10 +625,10 @@
     var char = getCharById(state.currentCharId);
     var displayName = char ? (char.name || char.handle) : "";
     var header = renderHeader("选择记忆切片", displayName, true, "window.__henji.goBack()", "");
-    var tl = state.timelines[state.currentCharId] || { entries: [] };
-    var candidates = (tl.entries || []).filter(function(e) { return !!e.content; }).sort(function(a, b) { return (a.order || 0) - (b.order || 0); });
+    if (!char) return header + '<div class="hj-content"><div class="hj-empty"><p>角色不存在</p></div></div>';
+    var candidates = [getNowCandidate(char)].concat(getHistoricalCandidates(char.id));
     if (candidates.length < 2) {
-      return header + '<div class="hj-content"><div class="hj-empty"><p>至少需要两段已生成正文的记忆才能创建平行时空</p><p class="hj-empty-hint">回到时间线，点开几张卡片阅读生成吧</p></div></div>';
+      return header + '<div class="hj-content"><div class="hj-empty"><p>至少需要再生成一段记忆正文才能创建平行时空</p><p class="hj-empty-hint">回到时间线，点开一张卡片阅读生成吧</p></div></div>';
     }
     var body = '<div class="hj-setup-hint">选择 2~3 段记忆，作为不同阶段的' + escapeHtml(displayName) + "</div>";
     body += '<div class="hj-select-list">';
@@ -579,8 +646,8 @@
       '<div class="hj-segmented-btn' + (state.userPresentDraft ? " active" : "") + '" onclick="window.__henji.setUserPresentDraft(true)">在场</div>' +
       '<div class="hj-segmented-btn' + (!state.userPresentDraft ? " active" : "") + '" onclick="window.__henji.setUserPresentDraft(false)">不在场</div>' +
       "</div>";
-    var canCreate = state.selectedSliceIds.length >= 2 && state.selectedSliceIds.length <= 3;
-    body += '<div style="padding:24px 20px"><button class="hj-btn hj-btn-primary" style="width:100%" ' + (canCreate ? "" : "disabled") + ' onclick="window.__henji.createParallelSession()">创建平行时空（' + state.selectedSliceIds.length + "/3）</button></div>";
+    var canCreate = state.selectedSliceIds.length >= 2 && state.selectedSliceIds.length <= 3 && !state.sessionCreating;
+    body += '<div style="padding:24px 20px"><button class="hj-btn hj-btn-primary" style="width:100%" ' + (canCreate ? "" : "disabled") + ' onclick="window.__henji.createParallelSession()">' + (state.sessionCreating ? "创建中…" : ("创建平行时空（" + state.selectedSliceIds.length + "/3）")) + "</button></div>";
     return header + '<div class="hj-content">' + body + "</div>";
   }
 
@@ -588,7 +655,8 @@
   function renderParallelChat() {
     var session = state.parallelSessions[state.currentSessionId];
     if (!session) return renderHeader("平行时空", "", true, "window.__henji.goBack()", "") + '<div class="hj-content"><div class="hj-empty"><p>会话不存在</p></div></div>';
-    var rightBtn = '<div class="hj-icon-btn" onclick="window.__henji.deleteParallelSession(\'' + session.id + '\')">' + ICONS.trash + "</div>";
+    var rightBtn = '<div class="hj-icon-btn" onclick="window.__henji.openAddParticipantModal()" title="添加身份">' + ICONS.plus + "</div>" +
+      '<div class="hj-icon-btn" onclick="window.__henji.deleteParallelSession(\'' + session.id + '\')">' + ICONS.trash + "</div>";
     var header = renderHeader(session.title, "平行时空", true, "window.__henji.goBack()", rightBtn);
 
     var presenceBar = '<div class="hj-presence-bar' + (session.userPresent ? "" : " away") + '" onclick="window.__henji.toggleSessionPresence(\'' + session.id + '\')">' +
@@ -647,7 +715,36 @@
     loadTimeline(charId).then(function() { goTo("timeline"); });
   }
   function showAddMemoryModal() { state.modalOpen = "addMemory"; renderApp(); }
-  function closeModal() { state.modalOpen = null; renderApp(); }
+  function closeModal() { state.modalOpen = null; state.addParticipantSelectedId = null; renderApp(); }
+  function openAddParticipantModal() {
+    var session = state.parallelSessions[state.currentSessionId];
+    if (!session) return;
+    if (session.slices.length >= 5) { toast("最多同时容纳5个身份"); return; }
+    state.addParticipantSelectedId = null;
+    state.modalOpen = "addParticipant";
+    renderApp();
+  }
+  function setAddParticipantSelection(id) { state.addParticipantSelectedId = id; renderApp(); }
+  function confirmAddParticipant() {
+    var session = state.parallelSessions[state.currentSessionId];
+    var id = state.addParticipantSelectedId;
+    if (!session || !id) return;
+    var char = getCharById(session.characterId);
+    if (!char) return;
+    buildSelectedSlices(char, [id], session.slices.length).then(function(slices) {
+      if (!slices.length) { toast("添加失败"); return; }
+      var s = slices[0];
+      session.slices.push(s);
+      session.messages.push({ id: generateId(), speaker: s.speakerId, type: "action", text: (s.ageLabel || s.title) + "的" + (char.name || char.handle) + "，出现在了这里。", ts: Date.now() });
+      session.updatedAt = Date.now();
+      saveParallelSession(session);
+      updateParallelIndexPreview(session);
+      state.modalOpen = null;
+      state.addParticipantSelectedId = null;
+      toast("已加入对话");
+      renderApp();
+    }).catch(function() { toast("添加失败，请重试"); });
+  }
   function submitAddMemory() {
     var char = getCharById(state.currentCharId);
     if (!char) return;
@@ -786,26 +883,25 @@
   function setUserPresentDraft(v) { state.userPresentDraft = !!v; renderApp(); }
   function createParallelSession() {
     var char = getCharById(state.currentCharId);
-    if (!char || state.selectedSliceIds.length < 2) return;
-    var slices = [];
-    for (var i = 0; i < state.selectedSliceIds.length; i++) {
-      var e = findEntry(char.id, state.selectedSliceIds[i]);
-      if (e) slices.push({ entryId: e.id, speakerId: "self_" + (i + 1), ageLabel: e.ageLabel, title: e.title, keywords: e.keywords || [], content: e.content || "" });
-    }
-    if (slices.length < 2) { toast("请至少选择两段记忆"); return; }
-    var session = {
-      id: generateId(), characterId: char.id, characterName: char.name || char.handle, characterAvatar: char.avatar || "",
-      title: slices.map(function(s) { return s.ageLabel || s.title; }).join(" × "),
-      slices: slices, userPresent: state.userPresentDraft, messages: [], createdAt: Date.now(), updatedAt: Date.now()
-    };
-    state.parallelSessions[session.id] = session;
-    state.parallelIndex.push({ id: session.id, characterId: char.id, title: session.title, sliceTitles: slices.map(function(s) { return s.title; }), userPresent: session.userPresent, createdAt: session.createdAt, updatedAt: session.updatedAt });
-    saveParallelIndex(state.parallelIndex);
-    saveParallelSession(session);
-    state.selectedSliceIds = [];
-    state.pendingMessages = [];
-    goTo("parallelChat", { currentSessionId: session.id });
-    advanceParallel();
+    if (!char || state.selectedSliceIds.length < 2 || state.sessionCreating) return;
+    state.sessionCreating = true; renderApp();
+    buildSelectedSlices(char, state.selectedSliceIds, 0).then(function(slices) {
+      state.sessionCreating = false;
+      if (slices.length < 2) { toast("请至少选择两段记忆"); renderApp(); return; }
+      var session = {
+        id: generateId(), characterId: char.id, characterName: char.name || char.handle, characterAvatar: char.avatar || "",
+        title: slices.map(function(s) { return s.ageLabel || s.title; }).join(" × "),
+        slices: slices, userPresent: state.userPresentDraft, messages: [], createdAt: Date.now(), updatedAt: Date.now()
+      };
+      state.parallelSessions[session.id] = session;
+      state.parallelIndex.push({ id: session.id, characterId: char.id, title: session.title, sliceTitles: slices.map(function(s) { return s.title; }), userPresent: session.userPresent, createdAt: session.createdAt, updatedAt: session.updatedAt });
+      saveParallelIndex(state.parallelIndex);
+      saveParallelSession(session);
+      state.selectedSliceIds = [];
+      state.pendingMessages = [];
+      goTo("parallelChat", { currentSessionId: session.id });
+      advanceParallel();
+    }).catch(function() { state.sessionCreating = false; toast("创建失败，请重试"); renderApp(); });
   }
   function openParallelSession(id) {
     state.pendingMessages = [];
@@ -1049,6 +1145,9 @@
       toggleSliceSelect: toggleSliceSelect,
       setUserPresentDraft: setUserPresentDraft,
       createParallelSession: createParallelSession,
+      openAddParticipantModal: openAddParticipantModal,
+      setAddParticipantSelection: setAddParticipantSelection,
+      confirmAddParticipant: confirmAddParticipant,
       openParallelSession: openParallelSession,
       deleteParallelSession: deleteParallelSession,
       toggleActionMode: toggleActionMode,
