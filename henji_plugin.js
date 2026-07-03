@@ -66,10 +66,6 @@
     return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
   function generateId() { return Date.now().toString(36) + Math.random().toString(36).substring(2, 9); }
-  function isTtsStyleText(text) {
-    if (!text) return false;
-    return /<#[\d.]+#>/.test(text) || /\([a-zA-Z][a-zA-Z\s]*\)/.test(text) || /[\[【]\s*(语音|voice)\s*[\]】]/i.test(text);
-  }
   function stripTtsMarkup(text) {
     if (!text) return text;
     return String(text).replace(/<#[\d.]+#>/g, " ").replace(/\([a-zA-Z][a-zA-Z\s]*\)/g, "").replace(/[\[【]\s*(语音|voice)\s*[\]】]/gi, "").replace(/\s{2,}/g, " ").trim();
@@ -290,21 +286,6 @@
     var s = findSlice(session, speakerId);
     if (s) return session.characterName + "·" + (s.ageLabel || s.title);
     return session.characterName;
-  }
-  function trySynthesizeVoice(session, msg) {
-    if (!state.roche || !state.roche.voice || !state.roche.voice.tts) return;
-    var char = getCharById(session.characterId);
-    var speakerName = msg.speaker === "user" ? (state.activePersona ? (state.activePersona.name || state.activePersona.handle) : "用户") : speakerLabel(session, msg.speaker);
-    var voiceId = char && (char.voiceId || char.voice || char.ttsVoiceId || char.voice_id);
-    var opts = { text: msg.text, language: "Chinese", senderName: speakerName };
-    if (voiceId) opts.voiceId = voiceId;
-    state.roche.voice.tts(opts).then(function(r) {
-      var url = (typeof r === "string") ? r : (r && (r.url || r.audioUrl)) || "";
-      if (!url) return;
-      msg.audioUrl = url;
-      saveParallelSession(session);
-      if (state.view === "parallelChat" && state.currentSessionId === session.id) renderApp();
-    }).catch(function() { /* 静默失败，保留纯文字展示，不影响正常对话 */ });
   }
   function buildParallelSystemPrompt(session) {
     var char = getCharById(session.characterId) || { name: session.characterName };
@@ -635,15 +616,13 @@
     var isUser = msg.speaker === "user";
     var name = isUser ? (state.activePersona ? (state.activePersona.name || state.activePersona.handle || "你") : "你") : speakerLabel(session, msg.speaker);
     var avatarUrl = isUser ? (state.activePersona && state.activePersona.avatar) : session.characterAvatar;
-    var displayText = msg.isVoice ? stripTtsMarkup(msg.text) : msg.text;
-    var audioHtml = msg.audioUrl ? ('<audio class="hj-msg-audio" controls preload="none" src="' + escapeHtml(msg.audioUrl) + '"></audio>') : "";
+    var displayText = stripTtsMarkup(msg.text);
     var awayTag = (isUser && msg.presentWhenSent === false) ? '<span class="hj-msg-away-tag">旁观时插入</span>' : "";
     return '<div class="hj-msg-row' + (isUser ? " me" : "") + '">' +
       '<div class="hj-msg-avatar">' + avatarHtml(avatarUrl, name, 34) + "</div>" +
       '<div class="hj-msg-col">' +
       (!isUser ? '<div class="hj-msg-name">' + escapeHtml(name) + "</div>" : "") +
       '<div class="hj-msg-bubble' + (isUser ? " me" : "") + '">' + escapeHtml(displayText) + "</div>" +
-      audioHtml +
       '<div class="hj-msg-time">' + formatTime(msg.ts) + awayTag + "</div>" +
       "</div>" +
       "</div>";
@@ -874,22 +853,17 @@
       var turns = data && data.turns;
       state.parallelBusy = false;
       if (!turns || !turns.length) { toast("生成失败，请重试"); renderApp(); return; }
-      var newMsgs = [];
       for (var i = 0; i < turns.length; i++) {
         var t = turns[i];
         var speaker = t.speaker;
         if (speaker !== "user" && !findSlice(session, speaker)) speaker = session.slices[0].speakerId;
         var msgType = t.type === "action" ? "action" : "text";
-        var msg = { id: generateId(), speaker: speaker, type: msgType, text: t.text || "", ts: Date.now() };
-        if (msgType === "text" && isTtsStyleText(msg.text)) msg.isVoice = true;
-        session.messages.push(msg);
-        newMsgs.push(msg);
+        session.messages.push({ id: generateId(), speaker: speaker, type: msgType, text: t.text || "", ts: Date.now() });
       }
       session.updatedAt = Date.now();
       saveParallelSession(session);
       updateParallelIndexPreview(session);
       renderApp();
-      for (var j = 0; j < newMsgs.length; j++) { if (newMsgs[j].isVoice) trySynthesizeVoice(session, newMsgs[j]); }
     }).catch(function(e) { state.parallelBusy = false; toast("生成失败：" + (e && e.message ? e.message : "未知错误")); renderApp(); });
   }
 
@@ -990,7 +964,6 @@
       "." + ROOT_CLASS + " .hj-msg-name{font-size:11px;color:#9a9a9e;margin-bottom:4px;margin-left:2px}",
       "." + ROOT_CLASS + " .hj-msg-bubble{background:#f2f2f7;border:1px solid #ececee;color:#1c1c1e;padding:10px 14px;border-radius:16px 16px 16px 4px;font-size:14px;line-height:1.55;white-space:pre-wrap;word-break:break-word}",
       "." + ROOT_CLASS + " .hj-msg-bubble.me{background:#1c1c1e;color:#ffffff;border-radius:16px 16px 4px 16px;border:none}",
-      "." + ROOT_CLASS + " .hj-msg-audio{width:220px;max-width:100%;height:34px;margin-top:6px;display:block}",
       "." + ROOT_CLASS + " .hj-msg-time{font-size:10px;color:#9a9a9e;margin-top:4px;margin-left:2px}",
       "." + ROOT_CLASS + " .hj-msg-row.me .hj-msg-time{margin-left:0;margin-right:2px}",
       "." + ROOT_CLASS + " .hj-msg-away-tag{margin-left:6px;padding:1px 6px;border-radius:8px;background:#f2f2f7;color:#9a9a9e;font-size:9px}",
