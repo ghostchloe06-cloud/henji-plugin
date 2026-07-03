@@ -23,7 +23,9 @@
     fastForward: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>',
     switchIcon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>',
     user: '<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
-    close: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+    close: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+    eye: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>',
+    eyeOff: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0112 20c-7 0-11-8-11-8a20.3 20.3 0 015.06-6.06M9.9 4.24A10.4 10.4 0 0112 4c7 0 11 8 11 8a20.3 20.3 0 01-2.16 3.19M14.12 14.12a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>'
   };
 
   var EMOTION_COLORS = {
@@ -322,10 +324,12 @@
       lines.push("角色基础设定：\n" + baseProfile);
       lines.push("");
       if (session.userPresent) {
-        lines.push(userName + "也在场，是真实参与对话的第三方，分身们可以感知到" + userName + "并与之互动。");
+        lines.push(userName + "此刻在场，是真实参与对话的第三方，分身们可以感知到" + userName + "并与之互动、称呼" + userName + "、向" + userName + "提问。");
       } else {
-        lines.push(userName + "此刻不在场，是隐形的旁观者，分身们完全无法感知到" + userName + "的存在，对话只在分身之间发生。");
+        lines.push(userName + "此刻不在场，是隐形的旁观者，分身们完全无法感知到" + userName + "本人的存在，不会称呼、看向或提及" + userName + "。");
+        lines.push(userName + "仍然可能隐形地插入一些场景变化（比如一声响动、一阵风、意外的事件），分身们可以对这些场景变化本身做出反应，但绝不能表现出'感觉到有人在场'或'被人操控'——他们只会把这当作环境里自然发生的事。");
       }
+      lines.push(userName + "在场与否可能会在对话过程中发生变化，请始终以本次提示词里给出的最新状态为准。");
       lines.push("");
       lines.push("对话要求：");
       lines.push("1. 保持每个分身与其所处阶段相符的性格、说话方式与心态，不要让分身表现出这个阶段不该有的成熟视角或信息。");
@@ -347,11 +351,16 @@
       for (var i = 0; i < recent.length; i++) {
         var m = recent[i];
         var name = m.speaker === "user" ? (state.activePersona ? (state.activePersona.name || state.activePersona.handle) : "用户") : speakerLabel(session, m.speaker);
-        if (m.type === "action") parts.push("（" + name + " " + m.text + "）");
-        else parts.push(name + "：" + m.text);
+        if (m.speaker === "user" && m.presentWhenSent === false) {
+          parts.push("（此刻" + name + "并不在场，只是隐形地让场景发生了这样的变化：" + m.text + "——分身们只能对场景变化本身做出反应，绝不能表现出察觉到" + name + "存在的样子）");
+        } else if (m.type === "action") {
+          parts.push("（" + name + " " + m.text + "）");
+        } else {
+          parts.push(name + "：" + m.text);
+        }
       }
     }
-    return parts.join("\n") + "\n\n请继续生成接下来的对话（1~3轮）。";
+    return parts.join("\n") + "\n\n请继续生成接下来的对话（3~10轮）。";
   }
 
   /* ─── 导航 ─── */
@@ -598,7 +607,12 @@
     var session = state.parallelSessions[state.currentSessionId];
     if (!session) return renderHeader("平行时空", "", true, "window.__henji.goBack()", "") + '<div class="hj-content"><div class="hj-empty"><p>会话不存在</p></div></div>';
     var rightBtn = '<div class="hj-icon-btn" onclick="window.__henji.deleteParallelSession(\'' + session.id + '\')">' + ICONS.trash + "</div>";
-    var header = renderHeader(session.title, "平行时空 · " + (session.userPresent ? "你在场" : "你旁观"), true, "window.__henji.goBack()", rightBtn);
+    var header = renderHeader(session.title, "平行时空", true, "window.__henji.goBack()", rightBtn);
+
+    var presenceBar = '<div class="hj-presence-bar' + (session.userPresent ? "" : " away") + '" onclick="window.__henji.toggleSessionPresence(\'' + session.id + '\')">' +
+      (session.userPresent ? ICONS.eye : ICONS.eyeOff) +
+      "<span>" + (session.userPresent ? "你在场 · 点击切换为旁观" : "你在旁观 · 点击切换为在场") + "</span>" +
+      "</div>";
 
     var msgsHtml = "";
     for (var i = 0; i < session.messages.length; i++) msgsHtml += renderChatMessage(session, session.messages[i]);
@@ -606,17 +620,15 @@
     if (!session.messages.length && !state.parallelBusy) msgsHtml = '<div class="hj-empty"><p>还没有对话，点击下方"推进对话"开始</p></div>';
 
     var footer = '<div class="hj-chat-footer">';
-    if (session.userPresent) {
-      footer += '<div class="hj-chat-input-row">' +
-        '<div class="hj-chat-toggle' + (state.actionMode ? " active" : "") + '" onclick="window.__henji.toggleActionMode()" title="旁白/动作">' + ICONS.edit + "</div>" +
-        '<input class="hj-chat-input" id="hj-chat-input" placeholder="' + (state.actionMode ? "描述一个动作或旁白…" : "输入消息…") + '" onkeydown="if(event.key===\'Enter\') window.__henji.sendParallelMessage()" />' +
-        '<div class="hj-chat-send-btn" onclick="window.__henji.sendParallelMessage()">' + ICONS.send + "</div>" +
-        "</div>";
-    }
+    footer += '<div class="hj-chat-input-row">' +
+      '<div class="hj-chat-toggle' + (state.actionMode ? " active" : "") + '" onclick="window.__henji.toggleActionMode()" title="旁白/动作">' + ICONS.edit + "</div>" +
+      '<input class="hj-chat-input" id="hj-chat-input" placeholder="' + (state.actionMode ? "描述一个动作或旁白…" : (session.userPresent ? "输入消息…" : "以旁观视角插入一个场景变化…")) + '" onkeydown="if(event.key===\'Enter\') window.__henji.sendParallelMessage()" />' +
+      '<div class="hj-chat-send-btn" onclick="window.__henji.sendParallelMessage()">' + ICONS.send + "</div>" +
+      "</div>";
     footer += '<button class="hj-btn hj-btn-outline hj-advance-btn" style="width:100%" ' + (state.parallelBusy ? "disabled" : "") + ' onclick="window.__henji.advanceParallel()">' + ICONS.fastForward + "<span>推进对话</span></button>";
     footer += "</div>";
 
-    return header + '<div class="hj-content hj-chat-scroll" id="hj-chat-scroll">' + msgsHtml + "</div>" + footer;
+    return header + presenceBar + '<div class="hj-content hj-chat-scroll" id="hj-chat-scroll">' + msgsHtml + "</div>" + footer;
   }
   function renderChatMessage(session, msg) {
     if (msg.type === "action") return '<div class="hj-msg-action">' + escapeHtml(stripTtsMarkup(msg.text)) + "</div>";
@@ -625,13 +637,14 @@
     var avatarUrl = isUser ? (state.activePersona && state.activePersona.avatar) : session.characterAvatar;
     var displayText = msg.isVoice ? stripTtsMarkup(msg.text) : msg.text;
     var audioHtml = msg.audioUrl ? ('<audio class="hj-msg-audio" controls preload="none" src="' + escapeHtml(msg.audioUrl) + '"></audio>') : "";
+    var awayTag = (isUser && msg.presentWhenSent === false) ? '<span class="hj-msg-away-tag">旁观时插入</span>' : "";
     return '<div class="hj-msg-row' + (isUser ? " me" : "") + '">' +
       (!isUser ? '<div class="hj-msg-avatar">' + avatarHtml(avatarUrl, name, 34) + "</div>" : "") +
       '<div class="hj-msg-col">' +
       (!isUser ? '<div class="hj-msg-name">' + escapeHtml(name) + "</div>" : "") +
       '<div class="hj-msg-bubble' + (isUser ? " me" : "") + '">' + escapeHtml(displayText) + "</div>" +
       audioHtml +
-      '<div class="hj-msg-time">' + formatTime(msg.ts) + "</div>" +
+      '<div class="hj-msg-time">' + formatTime(msg.ts) + awayTag + "</div>" +
       "</div>" +
       (isUser ? '<div class="hj-msg-avatar">' + avatarHtml(avatarUrl, name, 34) + "</div>" : "") +
       "</div>";
@@ -825,13 +838,23 @@
     }
   }
   function toggleActionMode() { state.actionMode = !state.actionMode; renderApp(); }
+  function toggleSessionPresence(id) {
+    var session = state.parallelSessions[id];
+    if (!session) return;
+    session.userPresent = !session.userPresent;
+    session.updatedAt = Date.now();
+    saveParallelSession(session);
+    updateParallelIndexPreview(session);
+    toast(session.userPresent ? "你现在在场了" : "你现在旁观，角色无法感知到你");
+    renderApp();
+  }
   function sendParallelMessage() {
     var session = state.parallelSessions[state.currentSessionId];
     var input = document.getElementById("hj-chat-input");
     if (!session || !input) return;
     var text = input.value.trim();
     if (!text) return;
-    session.messages.push({ id: generateId(), speaker: "user", type: state.actionMode ? "action" : "text", text: text, ts: Date.now() });
+    session.messages.push({ id: generateId(), speaker: "user", type: state.actionMode ? "action" : "text", text: text, ts: Date.now(), presentWhenSent: session.userPresent });
     input.value = "";
     state.actionMode = false;
     session.updatedAt = Date.now();
@@ -971,6 +994,10 @@
       "." + ROOT_CLASS + " .hj-msg-audio{width:220px;max-width:100%;height:34px;margin-top:6px;display:block}",
       "." + ROOT_CLASS + " .hj-msg-time{font-size:10px;color:#9a9a9e;margin-top:4px;margin-left:2px}",
       "." + ROOT_CLASS + " .hj-msg-row.me .hj-msg-time{margin-left:0;margin-right:2px}",
+      "." + ROOT_CLASS + " .hj-msg-away-tag{margin-left:6px;padding:1px 6px;border-radius:8px;background:#f2f2f7;color:#9a9a9e;font-size:9px}",
+      "." + ROOT_CLASS + " .hj-presence-bar{display:flex;align-items:center;justify-content:center;gap:6px;padding:8px 12px;font-size:12px;color:#1c1c1e;background:#f7f7f8;border-bottom:1px solid #ececee;cursor:pointer}",
+      "." + ROOT_CLASS + " .hj-presence-bar.away{color:#6e6e73;background:#fbfbfb}",
+      "." + ROOT_CLASS + " .hj-presence-bar svg{flex-shrink:0}",
       "." + ROOT_CLASS + " .hj-msg-action{text-align:center;font-size:12.5px;font-style:italic;color:#9a9a9e;margin:14px 30px}",
       "." + ROOT_CLASS + " .hj-chat-typing{display:flex;align-items:center;gap:8px;padding:6px 4px;color:#9a9a9e;font-size:12px}",
       "." + ROOT_CLASS + " .hj-chat-footer{border-top:1px solid #ececee;padding:10px 14px;padding-bottom:calc(10px + var(--safe-bottom,0px));display:flex;flex-direction:column;gap:8px;background:#ffffff}",
@@ -1010,6 +1037,7 @@
       openParallelSession: openParallelSession,
       deleteParallelSession: deleteParallelSession,
       toggleActionMode: toggleActionMode,
+      toggleSessionPresence: toggleSessionPresence,
       sendParallelMessage: sendParallelMessage,
       advanceParallel: advanceParallel
     };
