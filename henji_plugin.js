@@ -68,11 +68,11 @@
   function generateId() { return Date.now().toString(36) + Math.random().toString(36).substring(2, 9); }
   function isTtsStyleText(text) {
     if (!text) return false;
-    return /<#[\d.]+#>/.test(text) || /\([a-zA-Z][a-zA-Z\s]*\)/.test(text);
+    return /<#[\d.]+#>/.test(text) || /\([a-zA-Z][a-zA-Z\s]*\)/.test(text) || /[\[【]\s*(语音|voice)\s*[\]】]/i.test(text);
   }
   function stripTtsMarkup(text) {
     if (!text) return text;
-    return String(text).replace(/<#[\d.]+#>/g, " ").replace(/\([a-zA-Z][a-zA-Z\s]*\)/g, "").replace(/\s{2,}/g, " ").trim();
+    return String(text).replace(/<#[\d.]+#>/g, " ").replace(/\([a-zA-Z][a-zA-Z\s]*\)/g, "").replace(/[\[【]\s*(语音|voice)\s*[\]】]/gi, "").replace(/\s{2,}/g, " ").trim();
   }
   function formatTime(ts) {
     var d = ts ? new Date(ts) : new Date();
