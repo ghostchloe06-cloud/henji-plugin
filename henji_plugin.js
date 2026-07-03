@@ -486,7 +486,7 @@
     var char = getCharById(state.currentCharId);
     var entry = char ? findEntry(char.id, state.currentEntryId) : null;
     if (!char || !entry) return renderHeader("痕迹", "", true, "window.__henji.goBack()", "") + '<div class="hj-content"><div class="hj-empty"><p>记忆不存在</p></div></div>';
-    var rightBtn = entry.content ? ('<div class="hj-icon-btn" onclick="window.__henji.generateEntryContent(\'' + entry.id + '\')">' + ICONS.refresh + "</div>") : "";
+    var rightBtn = entry.content ? ('<div class="hj-icon-btn' + (state.entryBusy ? " hj-icon-btn-busy" : "") + '" onclick="window.__henji.generateEntryContent(\'' + entry.id + '\')">' + ICONS.refresh + "</div>") : "";
     var header = renderHeader(entry.title || "记忆", entry.ageLabel || "", true, "window.__henji.goBack()", rightBtn);
     var colors = getEmotionColor(entry.emotionTag);
     var body;
@@ -503,7 +503,8 @@
       var kws = entry.keywords || [];
       var tagsHtml = "";
       for (var j = 0; j < kws.length; j++) tagsHtml += '<span class="hj-tag-pill">' + escapeHtml(kws[j]) + "</span>";
-      body = '<div class="hj-detail-meta"><span class="hj-emotion-pill" style="background:' + colors.bg + ";color:" + colors.fg + '">' + escapeHtml(entry.emotionTag || "") + "</span>" +
+      body = (state.entryBusy ? '<div class="hj-regen-banner"><div class="hj-spinner-sm"></div><span>正在重新生成，以下是上一版内容…</span></div>' : "") +
+        '<div class="hj-detail-meta"><span class="hj-emotion-pill" style="background:' + colors.bg + ";color:" + colors.fg + '">' + escapeHtml(entry.emotionTag || "") + "</span>" +
         (entry.tone ? '<span class="hj-card-tone">情绪底色：' + escapeHtml(entry.tone) + "</span>" : "") + "</div>" +
         '<div class="hj-detail-body">' + ph + "</div>" +
         (tagsHtml ? '<div class="hj-card-tags" style="padding:0 20px 24px">' + tagsHtml + "</div>" : "");
@@ -831,6 +832,8 @@
       "." + ROOT_CLASS + " .hj-header-subtitle{font-size:11px;letter-spacing:.08em;color:#9a9a9e;font-style:italic;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
       "." + ROOT_CLASS + " .hj-icon-btn{width:36px;height:36px;display:flex;align-items:center;justify-content:center;border-radius:50%;cursor:pointer;color:#1c1c1e;transition:background .2s,transform .1s}",
       "." + ROOT_CLASS + " .hj-icon-btn:active{transform:scale(.9);background:#f2f2f7}",
+      "." + ROOT_CLASS + " .hj-icon-btn-busy{opacity:.35;pointer-events:none;animation:hjSpin 1s linear infinite}",
+      "." + ROOT_CLASS + " .hj-regen-banner{display:flex;align-items:center;gap:8px;padding:10px 20px;color:#6e6e73;font-size:12.5px;background:#f7f7f8;border-bottom:1px solid #ececee}",
       "." + ROOT_CLASS + " .hj-content{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:calc(24px + var(--safe-bottom,0px))}",
       "." + ROOT_CLASS + " .hj-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:70px 24px;color:#9a9a9e;text-align:center;gap:10px}",
       "." + ROOT_CLASS + " .hj-empty svg{width:40px;height:40px;opacity:.35}",
