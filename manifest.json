@@ -1,0 +1,18 @@
+{
+  "id": "henji",
+  "name": "痕迹",
+  "version": "1.0.0",
+  "description": "为角色生成人生轨迹时间线，支持关键词自定义记忆、相遇后记忆生成，以及不同人生阶段分身对话的“平行时空”。",
+  "author": "chloe",
+  "entry": "https://raw.githubusercontent.com/ghostchloe06-cloud/henji-plugin/main/henji_plugin.js",
+  "hash": "",
+  "permissions": [
+    "persona:read",
+    "character:read",
+    "memory:read",
+    "worldbook:read",
+    "ai:chat",
+    "storage",
+    "ui"
+  ]
+}
