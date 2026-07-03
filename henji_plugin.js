@@ -84,7 +84,8 @@
   function parallelSessionKey(id) { return "parallel_" + id; }
 
   function loadTimeline(charId) {
-    if (!state.roche || !state.roche.storage) { state.timelines[charId] = state.timelines[charId] || { entries: [] }; return Promise.resolve(state.timelines[charId]); }
+    if (state.timelines[charId]) return Promise.resolve(state.timelines[charId]);
+    if (!state.roche || !state.roche.storage) { state.timelines[charId] = { entries: [] }; return Promise.resolve(state.timelines[charId]); }
     return state.roche.storage.get(tlKey(charId)).then(function(v) {
       state.timelines[charId] = (v && v.entries) ? v : { entries: [] };
       return state.timelines[charId];
