@@ -486,7 +486,8 @@
     var char = getCharById(state.currentCharId);
     var entry = char ? findEntry(char.id, state.currentEntryId) : null;
     if (!char || !entry) return renderHeader("痕迹", "", true, "window.__henji.goBack()", "") + '<div class="hj-content"><div class="hj-empty"><p>记忆不存在</p></div></div>';
-    var rightBtn = entry.content ? ('<div class="hj-icon-btn' + (state.entryBusy ? " hj-icon-btn-busy" : "") + '" onclick="window.__henji.generateEntryContent(\'' + entry.id + '\')">' + ICONS.refresh + "</div>") : "";
+    var rightBtn = (entry.content ? ('<div class="hj-icon-btn' + (state.entryBusy ? " hj-icon-btn-busy" : "") + '" onclick="window.__henji.generateEntryContent(\'' + entry.id + '\')">' + ICONS.refresh + "</div>") : "") +
+      '<div class="hj-icon-btn" onclick="window.__henji.deleteEntry(\'' + entry.id + '\')">' + ICONS.trash + "</div>";
     var header = renderHeader(entry.title || "记忆", entry.ageLabel || "", true, "window.__henji.goBack()", rightBtn);
     var colors = getEmotionColor(entry.emotionTag);
     var body;
@@ -715,6 +716,24 @@
       state.entryBusy = false;
       renderApp();
     }).catch(function(e) { state.entryBusy = false; toast("生成失败：" + (e && e.message ? e.message : "未知错误")); renderApp(); });
+  }
+  function deleteEntry(id) {
+    var char = getCharById(state.currentCharId);
+    var entry = char ? findEntry(char.id, id) : null;
+    if (!char || !entry) return;
+    function doDelete() {
+      var tl = state.timelines[char.id];
+      if (!tl) return;
+      tl.entries = tl.entries.filter(function(e) { return e.id !== id; });
+      saveTimeline(char.id, tl);
+      toast("已删除");
+      goBack();
+    }
+    if (state.roche && state.roche.ui && state.roche.ui.confirm) {
+      state.roche.ui.confirm({ title: "删除这段记忆", message: "删除后无法恢复，确定要删除「" + (entry.title || "这段记忆") + "」吗？" }).then(function(ok) { if (ok) doDelete(); }).catch(function() {});
+    } else {
+      doDelete();
+    }
   }
   function openParallelList() {
     if (state.parallelIndex && state.parallelIndex.length !== undefined) { goTo("parallelList"); return; }
@@ -948,6 +967,7 @@
       generateMeetTimeline: generateMeetTimeline,
       openEntry: openEntry,
       generateEntryContent: generateEntryContent,
+      deleteEntry: deleteEntry,
       openParallelList: openParallelList,
       openParallelSetup: openParallelSetup,
       toggleSliceSelect: toggleSliceSelect,
