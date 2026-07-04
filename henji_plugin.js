@@ -359,24 +359,29 @@
     });
   }
   function buildAdvanceUserMessage(session) {
-    var parts = [];
-    var recent = session.messages.slice(-30);
-    if (recent.length === 0) {
-      parts.push("（对话尚未开始，请生成一个自然的开场——分身们刚刚意识到彼此的存在。）");
-    } else {
-      for (var i = 0; i < recent.length; i++) {
-        var m = recent[i];
-        var name = m.speaker === "user" ? (state.activePersona ? (state.activePersona.name || state.activePersona.handle) : "用户") : speakerLabel(session, m.speaker);
-        if (m.speaker === "user" && m.presentWhenSent === false) {
-          parts.push("（此刻" + name + "并不在场，只是隐形地让场景发生了这样的变化：" + m.text + "——分身们只能对场景变化本身做出反应，绝不能表现出察觉到" + name + "存在的样子）");
-        } else if (m.type === "action") {
-          parts.push("（" + name + " " + m.text + "）");
-        } else {
-          parts.push(name + "：" + m.text);
-        }
-      }
+    if (session.messages.length === 0) {
+      return "（对话尚未开始，请生成一个自然的开场——分身们刚刚意识到彼此的存在。）\n\n请继续生成接下来的对话（3~10轮）。";
     }
-    return parts.join("\n") + "\n\n请继续生成接下来的对话（3~10轮）。";
+    /* 按实际文本长度截断，而不是固定消息条数——避免多角色场景几次"推进"就把早期见面记忆挤出上下文 */
+    var CHAR_BUDGET = 8000;
+    var lines = [];
+    var totalLen = 0;
+    for (var i = session.messages.length - 1; i >= 0; i--) {
+      var m = session.messages[i];
+      var name = m.speaker === "user" ? (state.activePersona ? (state.activePersona.name || state.activePersona.handle) : "用户") : speakerLabel(session, m.speaker);
+      var line;
+      if (m.speaker === "user" && m.presentWhenSent === false) {
+        line = "（此刻" + name + "并不在场，只是隐形地让场景发生了这样的变化：" + m.text + "——分身们只能对场景变化本身做出反应，绝不能表现出察觉到" + name + "存在的样子）";
+      } else if (m.type === "action") {
+        line = "（" + name + " " + m.text + "）";
+      } else {
+        line = name + "：" + m.text;
+      }
+      if (totalLen + line.length > CHAR_BUDGET && lines.length > 0) break;
+      lines.unshift(line);
+      totalLen += line.length;
+    }
+    return lines.join("\n") + "\n\n请继续生成接下来的对话（3~10轮）。";
   }
 
   /* ─── 导航 ─── */
