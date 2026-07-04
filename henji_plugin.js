@@ -691,7 +691,12 @@
       '<input class="hj-chat-input" id="hj-chat-input" placeholder="' + (state.actionMode ? "描述一个动作或旁白，回车暂存…" : (session.userPresent ? "输入消息，回车暂存…" : "以旁观视角插入场景变化，回车暂存…")) + '" onkeydown="if(event.key===\'Enter\') window.__henji.stagePendingMessage()" />' +
       '<div class="hj-chat-send-btn" onclick="window.__henji.sendParallelMessage()">' + ICONS.send + "</div>" +
       "</div>";
-    footer += '<button class="hj-btn hj-btn-outline hj-advance-btn" style="width:100%" ' + (state.parallelBusy ? "disabled" : "") + ' onclick="window.__henji.advanceParallel()">' + ICONS.fastForward + "<span>推进对话</span></button>";
+    footer += '<div style="display:flex;gap:8px">';
+    if (canRerollLastRound(session)) {
+      footer += '<button class="hj-btn hj-btn-outline" style="flex-shrink:0;padding:11px 14px" ' + (state.parallelBusy ? "disabled" : "") + ' onclick="window.__henji.rerollLastRound()" title="重roll上一轮">' + ICONS.refresh + "</button>";
+    }
+    footer += '<button class="hj-btn hj-btn-outline hj-advance-btn" style="flex:1" ' + (state.parallelBusy ? "disabled" : "") + ' onclick="window.__henji.advanceParallel()">' + ICONS.fastForward + "<span>推进对话</span></button>";
+    footer += "</div>";
     footer += "</div>";
 
     return header + presenceBar + '<div class="hj-content hj-chat-scroll" id="hj-chat-scroll">' + msgsHtml + "</div>" + footer;
@@ -896,7 +901,7 @@
       var session = {
         id: generateId(), characterId: char.id, characterName: char.name || char.handle, characterAvatar: char.avatar || "",
         title: slices.map(function(s) { return s.ageLabel || s.title; }).join(" × "),
-        slices: slices, userPresent: state.userPresentDraft, messages: [], createdAt: Date.now(), updatedAt: Date.now()
+        slices: slices, userPresent: state.userPresentDraft, messages: [], lastRoundMessageIds: [], createdAt: Date.now(), updatedAt: Date.now()
       };
       state.parallelSessions[session.id] = session;
       state.parallelIndex.push({ id: session.id, characterId: char.id, title: session.title, sliceTitles: slices.map(function(s) { return s.title; }), userPresent: session.userPresent, createdAt: session.createdAt, updatedAt: session.updatedAt });
@@ -991,18 +996,42 @@
       var turns = data && data.turns;
       state.parallelBusy = false;
       if (!turns || !turns.length) { toast("生成失败，请重试"); renderApp(); return; }
+      var newIds = [];
       for (var i = 0; i < turns.length; i++) {
         var t = turns[i];
         var speaker = t.speaker;
         if (speaker !== "user" && !findSlice(session, speaker)) speaker = session.slices[0].speakerId;
         var msgType = t.type === "action" ? "action" : "text";
-        session.messages.push({ id: generateId(), speaker: speaker, type: msgType, text: t.text || "", ts: Date.now() });
+        var msg = { id: generateId(), speaker: speaker, type: msgType, text: t.text || "", ts: Date.now() };
+        session.messages.push(msg);
+        newIds.push(msg.id);
       }
+      session.lastRoundMessageIds = newIds;
       session.updatedAt = Date.now();
       saveParallelSession(session);
       updateParallelIndexPreview(session);
       renderApp();
     }).catch(function(e) { state.parallelBusy = false; toast("生成失败：" + (e && e.message ? e.message : "未知错误")); renderApp(); });
+  }
+  function canRerollLastRound(session) {
+    var ids = session.lastRoundMessageIds || [];
+    if (!ids.length) return false;
+    var msgs = session.messages;
+    if (msgs.length < ids.length) return false;
+    var tail = msgs.slice(msgs.length - ids.length);
+    for (var i = 0; i < ids.length; i++) { if (tail[i].id !== ids[i]) return false; }
+    return true;
+  }
+  function rerollLastRound() {
+    var session = state.parallelSessions[state.currentSessionId];
+    if (!session || state.parallelBusy) return;
+    if (!canRerollLastRound(session)) { toast("无法重roll，对话已经继续了"); return; }
+    var removeCount = session.lastRoundMessageIds.length;
+    session.messages = session.messages.slice(0, session.messages.length - removeCount);
+    session.lastRoundMessageIds = [];
+    saveParallelSession(session);
+    renderApp();
+    advanceParallel();
   }
 
   /* ─── 样式 ─── */
@@ -1160,7 +1189,8 @@
       stagePendingMessage: stagePendingMessage,
       removePendingMessage: removePendingMessage,
       sendParallelMessage: sendParallelMessage,
-      advanceParallel: advanceParallel
+      advanceParallel: advanceParallel,
+      rerollLastRound: rerollLastRound
     };
   }
   Object.defineProperty(window, "__henji", {
