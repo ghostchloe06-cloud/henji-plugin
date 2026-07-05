@@ -1,0 +1,3 @@
+安装链接：
+
+https://raw.githubusercontent.com/wenqv4617-art/roche-if/main/manifest.json

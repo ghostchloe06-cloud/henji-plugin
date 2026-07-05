@@ -1,0 +1,20 @@
+{
+  "id": "roche-story-engine",
+  "name": "剧情引擎",
+  "version": "1.0.6",
+  "description": "基于 Roche 冻结上下文，为角色与用户开启高度拟真、防漂移的平行 IF 分支出线。支持线上微信、线下文学叙事双模、高级操作回滚与客观记忆沉淀。",
+  "author": "wen",
+  "entry": "https://raw.githubusercontent.com/<YOUR_GITHUB_USERNAME>/<YOUR_REPO_NAME>/main/plugin.js",
+  "hash": "",
+  "permissions": [
+    "persona:read",
+    "character:read",
+    "conversation:read",
+    "memory:read",
+    "memory:write",
+    "worldbook:read",
+    "ai:chat",
+    "storage",
+    "ui"
+  ]
+}
